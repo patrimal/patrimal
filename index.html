@@ -1,7 +1,399 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programmatic Advertising Test Site</title>
+    <style>
+        .ad-container {
+            width: 975px;
+            height: 95px;
+            margin: 20px auto;
+            border: 1px dashed #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .log-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-time {
+            color: #666;
+            margin-right: 10px;
+        }
+        .log-info {
+            color: #2196F3;
+        }
+        .log-success {
+            color: #4CAF50;
+        }
+        .log-warning {
+            color: #FFC107;
+        }
+        .log-error {
+            color: #F44336;
+        }
+        .progress-tracker {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        .progress-steps::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #ddd;
+            z-index: 1;
+        }
+        .progress-step {
+            position: relative;
+            z-index: 2;
+            background: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #666;
+        }
+        .progress-step.active {
+            border-color: #2196F3;
+            background: #2196F3;
+            color: white;
+        }
+        .progress-step.completed {
+            border-color: #4CAF50;
+            background: #4CAF50;
+            color: white;
+        }
+        .progress-step.failed {
+            border-color: #F44336;
+            background: #F44336;
+            color: white;
+        }
+        .step-label {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 12px;
+            color: #666;
+        }
+        .step-details {
+            margin-top: 60px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+        .step-details.active {
+            display: block;
+        }
+        .bid-details {
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .bid-details pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+    <!-- Prebid.js Library -->
+    <script async src="https://cdn.jsdelivr.net/npm/prebid.js@latest/dist/prebid.js"></script>
+</head>
 <body>
-<h1>Hello World</h1>
-<p>Trying out hosting a simple site on GitHub Pages, with a custom domain!</p>
+    <div class="content">
+        <h1>Programmatic Advertising Test Site</h1>
+        <p>This is a test environment for understanding programmatic advertising end-to-end.</p>
+        
+        <div class="ad-container" id="banner-ad">
+            <!-- Ad slot will be populated by Prebid.js -->
+        </div>
+
+        <h2>Dummy Content</h2>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+        <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    </div>
+
+    <div class="progress-tracker">
+        <h3>Auction Progress</h3>
+        <div class="progress-steps">
+            <div class="progress-step" id="step-init">
+                1
+                <span class="step-label">Initialization</span>
+            </div>
+            <div class="progress-step" id="step-request">
+                2
+                <span class="step-label">Bid Requests</span>
+            </div>
+            <div class="progress-step" id="step-response">
+                3
+                <span class="step-label">Bid Responses</span>
+            </div>
+            <div class="progress-step" id="step-auction">
+                4
+                <span class="step-label">Auction</span>
+            </div>
+            <div class="progress-step" id="step-render">
+                5
+                <span class="step-label">Ad Render</span>
+            </div>
+        </div>
+        <div class="step-details" id="step-details"></div>
+    </div>
+
+    <div class="log-container" id="log-container">
+        <h3>Prebid.js Auction Log</h3>
+        <div id="log-entries"></div>
+    </div>
+
+    <script>
+        // Progress tracker utility
+        const progressTracker = {
+            steps: {
+                init: document.getElementById('step-init'),
+                request: document.getElementById('step-request'),
+                response: document.getElementById('step-response'),
+                auction: document.getElementById('step-auction'),
+                render: document.getElementById('step-render')
+            },
+            details: document.getElementById('step-details'),
+            
+            updateStep: function(step, status, details = '') {
+                const stepElement = this.steps[step];
+                stepElement.className = 'progress-step ' + status;
+                
+                if (details) {
+                    this.details.innerHTML = details;
+                    this.details.className = 'step-details active';
+                }
+            }
+        };
+
+        // Logging utility
+        const logger = {
+            container: document.getElementById('log-entries'),
+            
+            log: function(message, type = 'info') {
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                
+                const time = new Date().toLocaleTimeString();
+                entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+                
+                this.container.appendChild(entry);
+                this.container.scrollTop = this.container.scrollHeight;
+            },
+
+            logBidDetails: function(bid, type = 'info') {
+                const details = `
+                    <div class="bid-details">
+                        <pre>${JSON.stringify(bid, null, 2)}</pre>
+                    </div>
+                `;
+                this.log(`Bid details: ${details}`, type);
+            }
+        };
+
+        // Mock bidder for testing
+        const mockBidder = {
+            code: 'mockBidder',
+            isBidRequestValid: function(bid) {
+                return true;
+            },
+            buildRequests: function(bidRequests) {
+                return {
+                    method: 'GET',
+                    url: 'mock://bid',
+                    data: bidRequests
+                };
+            },
+            interpretResponse: function(response, request) {
+                // Generate random bid between $0.50 and $5.00
+                const cpm = (Math.random() * 4.5 + 0.5).toFixed(2);
+                return [{
+                    requestId: request.data[0].bidId,
+                    cpm: cpm,
+                    currency: 'USD',
+                    width: 975,
+                    height: 95,
+                    creativeId: 'mock-creative-' + Math.random().toString(36).substr(2, 9),
+                    netRevenue: true,
+                    ttl: 300,
+                    mediaType: 'banner',
+                    source: 'mockBidder',
+                    status: 'success',
+                    requestTimestamp: Date.now() - 100,
+                    responseTimestamp: Date.now()
+                }];
+            }
+        };
+
+        // Register mock bidder
+        window.pbjs = window.pbjs || {};
+        window.pbjs.que = window.pbjs.que || [];
+        pbjs.que.push(function() {
+            pbjs.registerBidder(mockBidder);
+        });
+
+        // Define ad units with mock bidder
+        const adUnits = [{
+            code: 'banner-ad',
+            mediaTypes: {
+                banner: {
+                    sizes: [[975, 95]]
+                }
+            },
+            bids: [{
+                bidder: 'mockBidder',
+                params: {
+                    placementId: 'test-placement',
+                    siteId: 'test-site'
+                }
+            }]
+        }];
+
+        // Initialize Prebid.js
+        pbjs.que.push(function() {
+            progressTracker.updateStep('init', 'active', 'Initializing Prebid.js in test mode...');
+            logger.log('Initializing Prebid.js in test mode...', 'info');
+
+            // Set timeout for auction
+            pbjs.setConfig({
+                bidderTimeout: 1000,
+                debug: true
+            });
+
+            logger.log('Prebid.js configuration set', 'info');
+            progressTracker.updateStep('init', 'completed', 'Prebid.js initialized successfully');
+
+            // Add event listeners for Prebid.js events
+            pbjs.onEvent('bidRequested', function(bidRequest) {
+                progressTracker.updateStep('request', 'active', `Requesting bid from ${bidRequest.bidder}`);
+                logger.log(`Bid requested from ${bidRequest.bidder}`, 'info');
+                logger.logBidDetails(bidRequest, 'info');
+            });
+
+            pbjs.onEvent('bidResponse', function(bid) {
+                progressTracker.updateStep('response', 'active', `Received bid from ${bid.bidder}`);
+                logger.log(`Bid received from ${bid.bidder}: $${bid.cpm} CPM`, 'success');
+                logger.logBidDetails(bid, 'success');
+            });
+
+            pbjs.onEvent('bidWon', function(bid) {
+                progressTracker.updateStep('auction', 'completed', `Auction won by ${bid.bidder}`);
+                logger.log(`Bid won by ${bid.bidder} at $${bid.cpm} CPM`, 'success');
+                logger.logBidDetails(bid, 'success');
+            });
+
+            pbjs.onEvent('bidTimeout', function(timedOutBids) {
+                progressTracker.updateStep('response', 'failed', `Timeout for: ${timedOutBids.map(bid => bid.bidder).join(', ')}`);
+                logger.log(`Bid timeout for: ${timedOutBids.map(bid => bid.bidder).join(', ')}`, 'warning');
+                timedOutBids.forEach(bid => logger.logBidDetails(bid, 'warning'));
+            });
+
+            pbjs.onEvent('auctionInit', function(auctionInit) {
+                progressTracker.updateStep('auction', 'active', 'Auction started');
+                logger.log('Auction started', 'info');
+                logger.logBidDetails(auctionInit, 'info');
+            });
+
+            pbjs.onEvent('auctionEnd', function(auctionEnd) {
+                progressTracker.updateStep('auction', 'completed', `Auction ended with ${auctionEnd.bidsReceived.length} bids`);
+                logger.log('Auction ended', 'info');
+                logger.log(`Total bids received: ${auctionEnd.bidsReceived.length}`, 'info');
+                logger.logBidDetails(auctionEnd, 'info');
+            });
+
+            // Add ad units
+            pbjs.addAdUnits(adUnits);
+            logger.log('Ad units added with mock bidder', 'info');
+
+            // Request bids
+            pbjs.requestBids({
+                bidsBackHandler: function(bidResponse) {
+                    logger.log('All bids received', 'success');
+                    
+                    // Log detailed bid information
+                    const winningBid = pbjs.getHighestCpmBids('banner-ad');
+                    if (winningBid && winningBid.length > 0) {
+                        const bid = winningBid[0];
+                        progressTracker.updateStep('render', 'active', 'Preparing to render winning ad');
+                        logger.log(`Winning bid details:
+                            Bidder: ${bid.bidder}
+                            CPM: $${bid.cpm}
+                            Currency: ${bid.currency}
+                            Size: ${bid.width}x${bid.height}
+                            TTL: ${bid.ttl} seconds
+                            Creative ID: ${bid.creativeId}
+                            Request ID: ${bid.requestId}
+                            Request Timestamp: ${new Date(bid.requestTimestamp).toLocaleString()}
+                            Response Timestamp: ${new Date(bid.responseTimestamp).toLocaleString()}
+                            Net Revenue: $${bid.netRevenue}
+                            Media Type: ${bid.mediaType}
+                            Source: ${bid.source}
+                            Status: ${bid.status}`, 'success');
+                        
+                        // Render a mock ad
+                        const adContainer = document.getElementById('banner-ad');
+                        adContainer.innerHTML = `
+                            <div style="width: 100%; height: 100%; background: #f0f0f0; display: flex; justify-content: center; align-items: center; border: 2px solid #4CAF50;">
+                                <div style="text-align: center;">
+                                    <h3>Mock Ad</h3>
+                                    <p>Winning Bid: $${bid.cpm} CPM</p>
+                                    <p>Bidder: ${bid.bidder}</p>
+                                </div>
+                            </div>
+                        `;
+                        progressTracker.updateStep('render', 'completed', 'Mock ad rendered successfully');
+                    } else {
+                        progressTracker.updateStep('render', 'failed', 'No winning bid found');
+                        logger.log('No winning bid found', 'warning');
+                    }
+                },
+                timeout: 1000
+            });
+        });
+
+        // Log page load
+        logger.log('Page loaded, waiting for Prebid.js to initialize in test mode...', 'info');
+    </script>
 </body>
 </html>
